@@ -1,63 +1,117 @@
 package web
 
 import (
-	"encoding/json"
+	"go-react-blog/db"
+	"go-react-blog/model"
 	"log"
 	"net/http"
-	"go-react-blog/db"
+	"strconv" // Add this import
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 type App struct {
-	d        db.DB
-	handlers map[string]http.HandlerFunc
+	d   db.DB
+	e   *echo.Echo
 }
 
 func NewApp(d db.DB, cors bool) App {
+	e := echo.New()
 	app := App{
-		d:        d,
-		handlers: make(map[string]http.HandlerFunc),
+		d: d,
+		e: e,
 	}
-	techHandler := app.GetTechnologies
-	if !cors {
-		techHandler = disableCors(techHandler)
+
+	// Middleware
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+	if cors {
+		e.Use(middleware.CORS())
 	}
-	app.handlers["/api/technologies"] = techHandler
-	app.handlers["/"] = http.FileServer(http.Dir("/webapp")).ServeHTTP
+
+	// Routes
+	e.GET("/api/technologies", app.GetTechnologies)
+	e.GET("/api/blogs", app.GetBlogs)
+	e.POST("/api/blogs", app.CreateBlog)
+	e.GET("/api/blogs/:id", app.GetBlog)
+	e.PUT("/api/blogs/:id", app.UpdateBlog)
+	e.DELETE("/api/blogs/:id", app.DeleteBlog)
+	
+	// Serve static files
+	e.Static("/", "webapp")
+	
 	return app
 }
 
 func (a *App) Serve() error {
-	for path, handler := range a.handlers {
-		http.Handle(path, handler)
-	}
-	log.Println("Web server is available on port 8080")
-	return http.ListenAndServe(":8080", nil)
+	return a.e.Start(":8080")
 }
 
-func (a *App) GetTechnologies(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func (a *App) GetTechnologies(c echo.Context) error {
 	technologies, err := a.d.GetTechnologies()
 	if err != nil {
-		sendErr(w, http.StatusInternalServerError, err.Error())
-		return
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-	err = json.NewEncoder(w).Encode(technologies)
+	return c.JSON(http.StatusOK, technologies)
+}
+
+func (a *App) GetBlogs(c echo.Context) error {
+    log.Println("Fetching blogs...")
+    blogs, err := a.d.GetBlogs()
+    if err != nil {
+        log.Printf("Error fetching blogs: %v\n", err)
+        return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+    }
+    log.Printf("Found %d blogs\n", len(blogs))
+    return c.JSON(http.StatusOK, blogs)
+}
+
+func (a *App) CreateBlog(c echo.Context) error {
+	blog := new(model.Blog)
+	if err := c.Bind(blog); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	if err := a.d.CreateBlog(blog); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusCreated, blog)
+}
+
+func (a *App) GetBlog(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		sendErr(w, http.StatusInternalServerError, err.Error())
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID format"})
 	}
+	blog, err := a.d.GetBlog(id)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Blog not found"})
+	}
+	return c.JSON(http.StatusOK, blog)
 }
 
-func sendErr(w http.ResponseWriter, code int, message string) {
-	resp, _ := json.Marshal(map[string]string{"error": message})
-	http.Error(w, string(resp), code)
+func (a *App) UpdateBlog(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID format"})
+	}
+	blog := new(model.Blog)
+	if err := c.Bind(blog); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	if err := a.d.UpdateBlog(id, blog); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, blog)
 }
 
-// Needed in order to disable CORS for local development
-func disableCors(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		h(w, r)
+func (a *App) DeleteBlog(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID format"})
 	}
+	if err := a.d.DeleteBlog(id); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.NoContent(http.StatusNoContent)
 }

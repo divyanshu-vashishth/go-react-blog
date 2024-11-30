@@ -1,0 +1,58 @@
+.blog-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 20px;
+}
+
+.blog-card {
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.blog-card img {
+    max-width: 100%;
+    height: auto;
+}
+
+.blog-detail {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.blog-detail img {
+    max-width: 100%;
+    height: auto;
+}
+
+.blog-form {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.blog-form div {
+    margin-bottom: 15px;
+}
+
+.blog-form label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.blog-form input,
+.blog-form textarea {
+    width: 100%;
+    padding: 8px;
+}
+
+.blog-form textarea {
+    height: 200px;
+}
+
+.error {
+    color: red;
+    margin: 10px 0;
+}
